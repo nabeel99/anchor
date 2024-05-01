@@ -101,6 +101,114 @@ pub struct CreateBar<'info> {
         space = Bar::LEN + 8
     )]
     bar: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_3: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_4: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_5: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_6: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_7: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_8: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_9: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_10: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_11: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_12: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_13: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_14: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_15: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_16: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_17: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_18: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_19: AccountLoader<'info, Bar>,
+    #[account(
+        init,
+        payer = authority, owner = ID,
+        space = Bar::LEN + 8
+    )]
+    bar_20: AccountLoader<'info, Bar>,
     #[account(mut)]
     authority: Signer<'info>,
     foo: AccountLoader<'info, Foo>,
