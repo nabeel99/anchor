@@ -101,14 +101,14 @@ pub fn generate(accs: &AccountsStruct) -> proc_macro2::TokenStream {
                 })
                 .collect();
             quote! {
-                let mut __ix_data = __ix_data;
+                //let mut __ix_data = __ix_data;
                 #[derive(anchor_lang::AnchorSerialize, anchor_lang::AnchorDeserialize)]
                 struct __Args {
                     #strct_inner
                 }
                 let __Args {
                     #(#field_names),*
-                } = __Args::deserialize(&mut __ix_data)
+                } = __Args::deserialize(&mut &__ix_data[..])
                     .map_err(|_| anchor_lang::error::ErrorCode::InstructionDidNotDeserialize)?;
             }
         }
