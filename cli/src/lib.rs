@@ -80,6 +80,9 @@ pub enum Command {
         /// Use Solidity instead of Rust
         #[clap(short, long)]
         solidity: bool,
+        /// Don't install JavaScript dependencies
+        #[clap(long)]
+        no_install: bool,
         /// Don't initialize git
         #[clap(long)]
         no_git: bool,
@@ -682,6 +685,7 @@ fn process_command(opts: Opts) -> Result<()> {
             name,
             javascript,
             solidity,
+            no_install,
             no_git,
             template,
             test_template,
@@ -691,6 +695,7 @@ fn process_command(opts: Opts) -> Result<()> {
             name,
             javascript,
             solidity,
+            no_install,
             no_git,
             template,
             test_template,
@@ -859,6 +864,7 @@ fn init(
     name: String,
     javascript: bool,
     solidity: bool,
+    no_install: bool,
     no_git: bool,
     template: ProgramTemplate,
     test_template: TestTemplate,
@@ -970,10 +976,12 @@ fn init(
         &program_id.to_string(),
     )?;
 
-    let yarn_result = install_node_modules("yarn")?;
-    if !yarn_result.status.success() {
-        println!("Failed yarn install will attempt to npm install");
-        install_node_modules("npm")?;
+    if !no_install {
+        let yarn_result = install_node_modules("yarn")?;
+        if !yarn_result.status.success() {
+            println!("Failed yarn install will attempt to npm install");
+            install_node_modules("npm")?;
+        }
     }
 
     if !no_git {
@@ -2323,8 +2331,11 @@ fn idl_set_buffer(
             let instructions = prepend_compute_unit_ix(vec![ix], &client, priority_fee)?;
 
             // Send the transaction.
-            for retry_transactions in 0..20 {
-                let latest_hash = client.get_latest_blockhash()?;
+            let mut latest_hash = client.get_latest_blockhash()?;
+            for retries in 0..20 {
+                if !client.is_blockhash_valid(&latest_hash, client.commitment())? {
+                    latest_hash = client.get_latest_blockhash()?;
+                }
                 let tx = Transaction::new_signed_with_payer(
                     &instructions,
                     Some(&keypair.pubkey()),
@@ -2335,7 +2346,7 @@ fn idl_set_buffer(
                 match client.send_and_confirm_transaction_with_spinner(&tx) {
                     Ok(_) => break,
                     Err(e) => {
-                        if retry_transactions == 19 {
+                        if retries == 19 {
                             return Err(anyhow!("Error: {e}. Failed to send transaction."));
                         }
                         println!("Error: {e}. Retrying transaction.");
@@ -2560,7 +2571,7 @@ fn idl_write(
     const MAX_WRITE_SIZE: usize = 600;
     let mut offset = 0;
     while offset < idl_data.len() {
-        println!("Step {offset} ");
+        println!("Step {offset}/{} ", idl_data.len());
         // Instruction data.
         let data = {
             let start = offset;
@@ -2583,8 +2594,11 @@ fn idl_write(
         // Send transaction.
         let instructions = prepend_compute_unit_ix(vec![ix], &client, priority_fee)?;
 
-        for retry_transactions in 0..20 {
-            let latest_hash = client.get_latest_blockhash()?;
+        let mut latest_hash = client.get_latest_blockhash()?;
+        for retries in 0..20 {
+            if !client.is_blockhash_valid(&latest_hash, client.commitment())? {
+                latest_hash = client.get_latest_blockhash()?;
+            }
             let tx = Transaction::new_signed_with_payer(
                 &instructions,
                 Some(&keypair.pubkey()),
@@ -2595,7 +2609,7 @@ fn idl_write(
             match client.send_and_confirm_transaction_with_spinner(&tx) {
                 Ok(_) => break,
                 Err(e) => {
-                    if retry_transactions == 19 {
+                    if retries == 19 {
                         return Err(anyhow!("Error: {e}. Failed to send transaction."));
                     }
                     println!("Error: {e}. Retrying transaction.");
@@ -3771,16 +3785,31 @@ fn create_idl_account(
                 data,
             });
         }
-        let latest_hash = client.get_latest_blockhash()?;
         instructions = prepend_compute_unit_ix(instructions, &client, priority_fee)?;
 
-        let tx = Transaction::new_signed_with_payer(
-            &instructions,
-            Some(&keypair.pubkey()),
-            &[&keypair],
-            latest_hash,
-        );
-        client.send_and_confirm_transaction_with_spinner(&tx)?;
+        let mut latest_hash = client.get_latest_blockhash()?;
+        for retries in 0..20 {
+            if !client.is_blockhash_valid(&latest_hash, client.commitment())? {
+                latest_hash = client.get_latest_blockhash()?;
+            }
+
+            let tx = Transaction::new_signed_with_payer(
+                &instructions,
+                Some(&keypair.pubkey()),
+                &[&keypair],
+                latest_hash,
+            );
+
+            match client.send_and_confirm_transaction_with_spinner(&tx) {
+                Ok(_) => break,
+                Err(err) => {
+                    if retries == 19 {
+                        return Err(anyhow!("Error creating IDL account: {}", err));
+                    }
+                    println!("Error creating IDL account: {}. Retrying...", err);
+                }
+            }
+        }
     }
 
     // Write directly to the IDL account buffer.
@@ -3843,8 +3872,11 @@ fn create_idl_buffer(
         priority_fee,
     )?;
 
-    for retries in 0..5 {
-        let latest_hash = client.get_latest_blockhash()?;
+    let mut latest_hash = client.get_latest_blockhash()?;
+    for retries in 0..20 {
+        if !client.is_blockhash_valid(&latest_hash, client.commitment())? {
+            latest_hash = client.get_latest_blockhash()?;
+        }
         let tx = Transaction::new_signed_with_payer(
             &instructions,
             Some(&keypair.pubkey()),
@@ -3854,7 +3886,7 @@ fn create_idl_buffer(
         match client.send_and_confirm_transaction_with_spinner(&tx) {
             Ok(_) => break,
             Err(err) => {
-                if retries == 4 {
+                if retries == 19 {
                     return Err(anyhow!("Error creating buffer account: {}", err));
                 }
                 println!("Error creating buffer account: {}. Retrying...", err);
@@ -4509,7 +4541,8 @@ fn get_recommended_micro_lamport_fee(client: &RpcClient, priority_fee: Option<u6
 
     Ok(median_priority_fee)
 }
-
+/// Prepend a compute unit ix, if the priority fee is greater than 0.
+/// This helps to improve the chances that the transaction will land.
 fn prepend_compute_unit_ix(
     instructions: Vec<Instruction>,
     client: &RpcClient,
@@ -4573,6 +4606,7 @@ mod tests {
             "await".to_string(),
             true,
             false,
+            true,
             false,
             ProgramTemplate::default(),
             TestTemplate::default(),
@@ -4592,6 +4626,7 @@ mod tests {
             "fn".to_string(),
             true,
             false,
+            true,
             false,
             ProgramTemplate::default(),
             TestTemplate::default(),
@@ -4611,6 +4646,7 @@ mod tests {
             "1project".to_string(),
             true,
             false,
+            true,
             false,
             ProgramTemplate::default(),
             TestTemplate::default(),
