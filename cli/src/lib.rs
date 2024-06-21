@@ -8,6 +8,7 @@ use crate::config::{
 use anchor_client::Cluster;
 use anchor_lang::idl::{IdlAccount, IdlInstruction, ERASED_AUTHORITY};
 use anchor_lang::{AccountDeserialize, AnchorDeserialize, AnchorSerialize};
+use anchor_lang_idl::convert::convert_idl;
 use anchor_lang_idl::types::{Idl, IdlArrayLen, IdlDefinedFields, IdlType, IdlTypeDefTy};
 use anyhow::{anyhow, Context, Result};
 use checks::{check_anchor_version, check_overflow};
@@ -17,7 +18,7 @@ use flate2::read::GzDecoder;
 use flate2::read::ZlibDecoder;
 use flate2::write::{GzEncoder, ZlibEncoder};
 use flate2::Compression;
-use heck::{ToKebabCase, ToSnakeCase};
+use heck::{ToKebabCase, ToLowerCamelCase, ToPascalCase, ToSnakeCase};
 use regex::{Regex, RegexBuilder};
 use reqwest::blocking::multipart::{Form, Part};
 use reqwest::blocking::Client;
@@ -275,6 +276,9 @@ pub enum Command {
         program_id: Pubkey,
         /// Filepath to the new program binary.
         program_filepath: String,
+        /// Arguments to pass to the underlying `solana program deploy` command.
+        #[clap(required = false, last = true)]
+        solana_args: Vec<String>,
     },
     #[cfg(feature = "dev")]
     /// Runs an airdrop loop, continuously funding the configured wallet.
@@ -481,7 +485,23 @@ pub enum IdlCommand {
     /// The address can be a program, IDL account, or IDL buffer.
     Fetch {
         address: Pubkey,
-        /// Output file for the idl (stdout if not specified).
+        /// Output file for the IDL (stdout if not specified).
+        #[clap(short, long)]
+        out: Option<String>,
+    },
+    /// Convert legacy IDLs (pre Anchor 0.30) to the new IDL spec
+    Convert {
+        /// Path to the IDL file
+        path: String,
+        /// Output file for the IDL (stdout if not specified)
+        #[clap(short, long)]
+        out: Option<String>,
+    },
+    /// Generate TypeScript type for the IDL
+    Type {
+        /// Path to the IDL file
+        path: String,
+        /// Output file for the IDL (stdout if not specified)
         #[clap(short, long)]
         out: Option<String>,
     },
@@ -781,7 +801,13 @@ fn process_command(opts: Opts) -> Result<()> {
         Command::Upgrade {
             program_id,
             program_filepath,
-        } => upgrade(&opts.cfg_override, program_id, program_filepath),
+            solana_args,
+        } => upgrade(
+            &opts.cfg_override,
+            program_id,
+            program_filepath,
+            solana_args,
+        ),
         Command::Idl { subcmd } => idl(&opts.cfg_override, subcmd),
         Command::Migrate => migrate(&opts.cfg_override),
         Command::Test {
@@ -1517,7 +1543,7 @@ fn build_cwd_verifiable(
             // Write out the TypeScript type.
             println!("Writing the .ts file");
             let ts_file = workspace_dir.join(format!("target/types/{}.ts", idl.metadata.name));
-            fs::write(&ts_file, rust_template::idl_ts(&idl)?)?;
+            fs::write(&ts_file, idl_ts(&idl)?)?;
 
             // Copy out the TypeScript type.
             if !&cfg.workspace.types.is_empty() {
@@ -1825,7 +1851,7 @@ fn _build_rust_cwd(
         // Write out the JSON file.
         write_idl(&idl, OutFile::File(out))?;
         // Write out the TypeScript type.
-        fs::write(&ts_out, rust_template::idl_ts(&idl)?)?;
+        fs::write(&ts_out, idl_ts(&idl)?)?;
 
         // Copy out the TypeScript type.
         let cfg_parent = cfg.path().parent().expect("Invalid Anchor.toml");
@@ -1903,7 +1929,7 @@ fn _build_solidity_cwd(
     };
 
     // Write out the TypeScript type.
-    fs::write(&ts_out, rust_template::idl_ts(&idl)?)?;
+    fs::write(&ts_out, idl_ts(&idl)?)?;
     // Copy out the TypeScript type.
     let cfg_parent = cfg.path().parent().expect("Invalid Anchor.toml");
     if !&cfg.workspace.types.is_empty() {
@@ -2191,6 +2217,8 @@ fn idl(cfg_override: &ConfigOverride, subcmd: IdlCommand) -> Result<()> {
             skip_lint,
         } => idl_build(cfg_override, program_name, out, out_ts, no_docs, skip_lint),
         IdlCommand::Fetch { address, out } => idl_fetch(cfg_override, address, out),
+        IdlCommand::Convert { path, out } => idl_convert(path, out),
+        IdlCommand::Type { path, out } => idl_type(path, out),
     }
 }
 
@@ -2655,7 +2683,7 @@ fn idl_build(
     write_idl(&idl, out)?;
 
     if let Some(path) = out_ts {
-        fs::write(path, rust_template::idl_ts(&idl)?)?;
+        fs::write(path, idl_ts(&idl)?)?;
     }
 
     Ok(())
@@ -2703,6 +2731,62 @@ fn idl_fetch(cfg_override: &ConfigOverride, address: Pubkey, out: Option<String>
         Some(out) => OutFile::File(PathBuf::from(out)),
     };
     write_idl(&idl, out)
+}
+
+fn idl_convert(path: String, out: Option<String>) -> Result<()> {
+    let idl = fs::read(path)?;
+    let idl = convert_idl(&idl)?;
+    let out = match out {
+        None => OutFile::Stdout,
+        Some(out) => OutFile::File(PathBuf::from(out)),
+    };
+    write_idl(&idl, out)
+}
+
+fn idl_type(path: String, out: Option<String>) -> Result<()> {
+    let idl = fs::read(path)?;
+    let idl = convert_idl(&idl)?;
+    let types = idl_ts(&idl)?;
+    match out {
+        Some(out) => fs::write(out, types)?,
+        _ => println!("{types}"),
+    };
+    Ok(())
+}
+
+fn idl_ts(idl: &Idl) -> Result<String> {
+    let idl_name = &idl.metadata.name;
+    let type_name = idl_name.to_pascal_case();
+    let idl = serde_json::to_string(idl)?;
+
+    // Convert every field of the IDL to camelCase
+    let camel_idl = Regex::new(r#""\w+":"([\w\d]+)""#)?
+        .captures_iter(&idl)
+        .fold(idl.clone(), |acc, cur| {
+            let name = cur.get(1).unwrap().as_str();
+
+            // Do not modify pubkeys
+            if Pubkey::from_str(name).is_ok() {
+                return acc;
+            }
+
+            let camel_name = name.to_lower_camel_case();
+            acc.replace(&format!(r#""{name}""#), &format!(r#""{camel_name}""#))
+        });
+
+    // Pretty format
+    let camel_idl = serde_json::to_string_pretty(&serde_json::from_str::<Idl>(&camel_idl)?)?;
+
+    Ok(format!(
+        r#"/**
+ * Program IDL in camelCase format in order to be used in JS/TS.
+ *
+ * Note that this is only a type helper and is not the actual IDL. The original
+ * IDL can be found at `target/idl/{idl_name}.json`.
+ */
+export type {type_name} = {camel_idl};
+"#
+    ))
 }
 
 fn write_idl(idl: &Idl, out: OutFile) -> Result<()> {
@@ -3333,7 +3417,7 @@ fn validator_flags(
                         ));
                     };
 
-                    let mut pubkeys = value
+                    let pubkeys = value
                         .as_array()
                         .unwrap()
                         .iter()
@@ -3342,35 +3426,32 @@ fn validator_flags(
                             Pubkey::from_str(address)
                                 .map_err(|_| anyhow!("Invalid pubkey {}", address))
                         })
-                        .collect::<Result<HashSet<Pubkey>>>()?;
+                        .collect::<Result<HashSet<Pubkey>>>()?
+                        .into_iter()
+                        .collect::<Vec<_>>();
+                    let accounts = client.get_multiple_accounts(&pubkeys)?;
 
-                    let accounts_keys = pubkeys.iter().cloned().collect::<Vec<_>>();
-                    let accounts = client.get_multiple_accounts(&accounts_keys)?;
-
-                    // Check if there are program accounts
-                    for (account, acc_key) in accounts.iter().zip(accounts_keys) {
-                        if let Some(account) = account {
-                            if account.owner == bpf_loader_upgradeable::id() {
-                                let upgradable: UpgradeableLoaderState = account
-                                    .deserialize_data()
-                                    .map_err(|_| anyhow!("Invalid program account {}", acc_key))?;
-
-                                if let UpgradeableLoaderState::Program {
-                                    programdata_address,
-                                } = upgradable
+                    for (pubkey, account) in pubkeys.into_iter().zip(accounts) {
+                        match account {
+                            Some(account) => {
+                                // Use a different flag for program accounts to fix the problem
+                                // described in https://github.com/anza-xyz/agave/issues/522
+                                if account.owner == bpf_loader_upgradeable::id()
+                                // Only programs are supported with `--clone-upgradeable-program`
+                                    && matches!(
+                                        account.deserialize_data::<UpgradeableLoaderState>()?,
+                                        UpgradeableLoaderState::Program { .. }
+                                    )
                                 {
-                                    pubkeys.insert(programdata_address);
+                                    flags.push("--clone-upgradeable-program".to_string());
+                                    flags.push(pubkey.to_string());
+                                } else {
+                                    flags.push("--clone".to_string());
+                                    flags.push(pubkey.to_string());
                                 }
                             }
-                        } else {
-                            return Err(anyhow!("Account {} not found", acc_key));
+                            _ => return Err(anyhow!("Account {} not found", pubkey)),
                         }
-                    }
-
-                    for pubkey in &pubkeys {
-                        // Push the clone flag for each array entry
-                        flags.push("--clone".to_string());
-                        flags.push(pubkey.to_string());
                     }
                 } else if key == "deactivate_feature" {
                     // Verify that the feature flags are valid pubkeys
@@ -3698,6 +3779,7 @@ fn upgrade(
     cfg_override: &ConfigOverride,
     program_id: Pubkey,
     program_filepath: String,
+    solana_args: Vec<String>,
 ) -> Result<()> {
     let path: PathBuf = program_filepath.parse().unwrap();
     let program_filepath = path.canonicalize()?.display().to_string();
@@ -3714,6 +3796,7 @@ fn upgrade(
             .arg("--program-id")
             .arg(strip_workspace_prefix(program_id.to_string()))
             .arg(strip_workspace_prefix(program_filepath))
+            .args(&solana_args)
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .output()

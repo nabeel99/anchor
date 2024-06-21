@@ -12,6 +12,14 @@ The minor version will be incremented upon a breaking change and the patch versi
 
 ### Features
 
+### Fixes
+
+### Breaking
+
+## [0.30.1] - 2024-06-20
+
+### Features
+
 - idl: Allow overriding the idl build toolchain with the `RUSTUP_TOOLCHAIN` environment variable ([#2941](https://github.com/coral-xyz/anchor/pull/2941])).
 - avm: Support customizing the installation location using `AVM_HOME` environment variable ([#2917](https://github.com/coral-xyz/anchor/pull/2917)).
 - avm: Optimize `avm list` when GitHub API rate limits are reached ([#2962](https://github.com/coral-xyz/anchor/pull/2962))
@@ -20,6 +28,16 @@ The minor version will be incremented upon a breaking change and the patch versi
 - lang: Implement `TryFromIntError` for `Error` to be able to propagate integer conversion errors ([#2950](https://github.com/coral-xyz/anchor/pull/2950)).
 - idl: Add ability to convert legacy IDLs ([#2986](https://github.com/coral-xyz/anchor/pull/2986)).
 - ts: Extract Anchor error codes into their own package ([#2983](https://github.com/coral-xyz/anchor/pull/2983)).
+- cli: Add additional solana arguments to the `upgrade` command ([#2998](https://github.com/coral-xyz/anchor/pull/2998)).
+- spl: Export `spl-associated-token-account` crate ([#2999](https://github.com/coral-xyz/anchor/pull/2999)).
+- lang: Support legacy IDLs with `declare_program!` ([#2997](https://github.com/coral-xyz/anchor/pull/2997)).
+- cli: Add `idl convert` command ([#3009](https://github.com/coral-xyz/anchor/pull/3009)).
+- cli: Add `idl type` command ([#3017](https://github.com/coral-xyz/anchor/pull/3017)).
+- lang: Add `anchor_lang::pubkey` macro for declaring `Pubkey` const values ([#3021](https://github.com/coral-xyz/anchor/pull/3021)).
+- cli: Sync program ids on the initial build ([#3023](https://github.com/coral-xyz/anchor/pull/3023)).
+- idl: Remove `anchor-syn` dependency ([#3030](https://github.com/coral-xyz/anchor/pull/3030)).
+- lang: Add `const` of program ID to `declare_id!` and `declare_program!` ([#3019](https://github.com/coral-xyz/anchor/pull/3019)).
+- idl: Add separate spec crate ([#3036](https://github.com/coral-xyz/anchor/pull/3036)).
 
 ### Fixes
 
@@ -38,6 +56,12 @@ The minor version will be incremented upon a breaking change and the patch versi
 - cli: Fix IDL write getting corrupted from retries ([#2964](https://github.com/coral-xyz/anchor/pull/2964)).
 - idl: Fix `unexpected_cfgs` build warning ([#2992](https://github.com/coral-xyz/anchor/pull/2992)).
 - lang: Make tuple struct fields public in `declare_program!` ([#2994](https://github.com/coral-xyz/anchor/pull/2994)).
+- Remove `rust-version` from crate manifests ([#3000](https://github.com/coral-xyz/anchor/pull/3000)).
+- cli: Fix upgradeable program clones ([#3010](https://github.com/coral-xyz/anchor/pull/3010)).
+- ts: Fix using IDLs that have defined types as generic arguments ([#3016](https://github.com/coral-xyz/anchor/pull/3016)).
+- idl: Fix generation with unsupported expressions ([#3033](https://github.com/coral-xyz/anchor/pull/3033)).
+- idl: Fix using `address` constraint with field expressions ([#3034](https://github.com/coral-xyz/anchor/pull/3034)).
+- lang: Fix using `bytemuckunsafe` account serialization with `declare_program!` ([#3037](https://github.com/coral-xyz/anchor/pull/3037)).
 
 ### Breaking
 
